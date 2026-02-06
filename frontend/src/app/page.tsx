@@ -243,12 +243,14 @@ function PlayerClock({
   time, 
   isActive, 
   isWhite, 
-  materialAdvantage 
+  materialAdvantage,
+  isThinking 
 }: { 
   time: number; 
   isActive: boolean; 
   isWhite: boolean;
   materialAdvantage: number;
+  isThinking?: boolean;
 }) {
   const isLow = time <= 30;
   const isCritical = time <= 10;
@@ -285,6 +287,11 @@ function PlayerClock({
           {playerAdvantage > 0 ? "+" : ""}{playerAdvantage}
         </div>
       )}
+      
+      {/* Thinking indicator */}
+      {isThinking && (
+        <span className="text-amber-400 text-sm font-medium animate-pulse">thinking...</span>
+      )}
     </div>
   );
 }
@@ -318,11 +325,9 @@ export default function Home() {
     return () => { isMounted.current = false; };
   }, []);
 
-  // Timer effect - pauses during AI thinking in coach mode
+  // Timer effect - ticks for both players (including AI)
   useEffect(() => {
     if (!gameStarted || gameOver || game.isGameOver()) return;
-    // In coach mode, don't tick during AI's turn
-    if (gameMode === "coach" && game.turn() !== playerColor) return;
 
     const interval = setInterval(() => {
       if (game.turn() === "w") {
@@ -345,7 +350,7 @@ export default function Home() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [gameStarted, gameOver, game, gameMode, playerColor]);
+  }, [gameStarted, gameOver, game]);
 
   // Fetch evaluation after each move
   useEffect(() => {
@@ -358,8 +363,8 @@ export default function Home() {
       setIsEvalLoading(true);
       try {
         const result = await fetchAnalysis(game.fen(), {
-          eloSelf: aiElo + 400,
-          eloOppo: aiElo + 400,
+          eloSelf: aiElo + 200,
+          eloOppo: aiElo + 200,
         });
         if (!cancelled && isMounted.current) {
           setEvaluation(result);
@@ -388,10 +393,7 @@ export default function Home() {
       setIsAiThinking(true);
       
       try {
-        // Add small delay for UX (feels more natural)
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        const result = await fetchAnalysis(game.fen(), { eloSelf: aiElo + 400, eloOppo: aiElo + 400 });
+        const result = await fetchAnalysis(game.fen(), { eloSelf: aiElo + 200, eloOppo: aiElo + 200 });
         
         if (!isMounted.current || gameOver) return;
         
@@ -400,14 +402,11 @@ export default function Home() {
         let sampledMove: string;
         const fullmoveNumber = parseInt(game.fen().split(" ")[5], 10);
         if (fullmoveNumber === 1 && game.turn() === "w") {
-          // AI is white, move 1: play e4 or d4
           sampledMove = Math.random() < 0.5 ? "e2e4" : "d2d4";
         } else if (fullmoveNumber === 1 && game.turn() === "b") {
-          // AI is black, responding to move 1: play e5 or d5
           sampledMove = Math.random() < 0.5 ? "e7e5" : "d7d5";
         } else {
           // Sample a move from the probability distribution (weighted random)
-          // This makes the AI play more naturally like a real human at this ELO
           const entries = Object.entries(result.moves);
           const totalProb = entries.reduce((sum, [, p]) => sum + p, 0);
           let rand = Math.random() * totalProb;
@@ -424,42 +423,67 @@ export default function Home() {
         const moveTo = sampledMove.slice(2, 4);
         const movePromotion = sampledMove.length > 4 ? sampledMove[4] : undefined;
         
+        // Determine think time based on game phase
+        let minThink: number, maxThink: number;
+        if (fullmoveNumber <= 10) {
+          // Opening: fast, theory moves
+          minThink = 2; maxThink = 8;
+        } else if (fullmoveNumber <= 25) {
+          // Middlegame: longer thinks
+          minThink = 5; maxThink = 20;
+        } else {
+          // Endgame: moderate
+          minThink = 3; maxThink = 12;
+        }
+        const totalThinkTime = minThink + Math.floor(Math.random() * (maxThink - minThink + 1));
+        
+        // Animate the clock ticking down at 3x speed for the think time
+        // The real clock already ticked during the API call (~1-2s),
+        // now fast-forward the remaining think time
+        const aiColor = playerColor === "w" ? "b" : "w";
+        const setAiTime = aiColor === "w" ? setWhiteTime : setBlackTime;
+        const tickInterval = Math.floor(1000 / 3); // 3x speed = ~333ms per second
+        
+        let aiTimedOut = false;
+        for (let i = 0; i < totalThinkTime; i++) {
+          if (!isMounted.current || gameOver) return;
+          await new Promise(resolve => setTimeout(resolve, tickInterval));
+          
+          let shouldBreak = false;
+          setAiTime(prev => {
+            if (prev <= 1) {
+              aiTimedOut = true;
+              shouldBreak = true;
+              return 0;
+            }
+            return prev - 1;
+          });
+          
+          // Need to check after state update — use a small delay
+          await new Promise(resolve => setTimeout(resolve, 10));
+          if (aiTimedOut || shouldBreak) break;
+        }
+        
+        if (aiTimedOut) {
+          setGameOver(`${aiColor === "w" ? "Black" : "White"} wins on time!`);
+          return;
+        }
+        
+        if (!isMounted.current || gameOver) return;
+        
         // Make the move
         const newGame = new Chess(game.fen());
         const moveObj: { from: string; to: string; promotion?: string } = { from: moveFrom, to: moveTo };
         if (movePromotion) moveObj.promotion = movePromotion;
         
-        console.log(`AI move: ${sampledMove} (from=${moveFrom}, to=${moveTo}) FEN=${game.fen()}`);
+        console.log(`AI move: ${sampledMove} (think=${totalThinkTime}s) FEN=${game.fen()}`);
         const move = newGame.move(moveObj);
         
         if (move) {
-          // Deduct random time from AI clock (0-30 seconds)
-          const timeDeduction = Math.floor(Math.random() * 31);
-          const aiColor = playerColor === "w" ? "b" : "w";
-          
-          let aiTimedOut = false;
-          if (aiColor === "w") {
-            setWhiteTime(prev => {
-              const newTime = Math.max(0, prev - timeDeduction);
-              if (newTime <= 0) aiTimedOut = true;
-              return newTime;
-            });
-          } else {
-            setBlackTime(prev => {
-              const newTime = Math.max(0, prev - timeDeduction);
-              if (newTime <= 0) aiTimedOut = true;
-              return newTime;
-            });
-          }
-          
           setGame(newGame);
-          // Don't set evaluation here — the eval effect will fetch
-          // for the new position when game state changes
           
           // Check for game over
-          if (aiTimedOut) {
-            setGameOver(`${aiColor === "w" ? "Black" : "White"} wins on time!`);
-          } else if (newGame.isCheckmate()) {
+          if (newGame.isCheckmate()) {
             setGameOver(`Checkmate! ${newGame.turn() === "w" ? "Black" : "White"} wins!`);
           } else if (newGame.isDraw()) {
             setGameOver("Draw!");
@@ -577,8 +601,8 @@ export default function Home() {
   };
 
   // Setup screen state
-  const [setupMode, setSetupMode] = useState<GameMode>("pass-and-play");
-  const [setupElo, setSetupElo] = useState(1000);
+  const [setupMode, setSetupMode] = useState<GameMode>("coach");
+  const [setupElo, setSetupElo] = useState(800);
   
   // Setup screen
   if (showSetup) {
@@ -597,16 +621,6 @@ export default function Home() {
             <h2 className="text-lg font-semibold text-white text-center mb-4">Game Mode</h2>
             <div className="flex gap-2">
               <button
-                onClick={() => setSetupMode("pass-and-play")}
-                className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
-                  setupMode === "pass-and-play"
-                    ? "bg-amber-600 text-white"
-                    : "bg-neutral-700 text-neutral-300 hover:bg-neutral-600"
-                }`}
-              >
-                Pass & Play
-              </button>
-              <button
                 onClick={() => setSetupMode("coach")}
                 className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
                   setupMode === "coach"
@@ -615,6 +629,16 @@ export default function Home() {
                 }`}
               >
                 vs Computer
+              </button>
+              <button
+                onClick={() => setSetupMode("pass-and-play")}
+                className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all ${
+                  setupMode === "pass-and-play"
+                    ? "bg-amber-600 text-white"
+                    : "bg-neutral-700 text-neutral-300 hover:bg-neutral-600"
+                }`}
+              >
+                Pass & Play
               </button>
             </div>
           </div>
@@ -689,18 +713,16 @@ export default function Home() {
           Checkmate Coach
         </h1>
         <p className="text-neutral-400 text-lg">{getStatusMessage()}</p>
-        {gameMode === "coach" && isAiThinking && (
-          <p className="text-amber-400 text-sm mt-1 animate-pulse">Computer is thinking...</p>
-        )}
       </div>
 
       {/* Top Clock - opponent's clock */}
       <div className="mb-4">
         <PlayerClock 
           time={boardOrientation === "w" ? blackTime : whiteTime} 
-          isActive={gameStarted && !gameOver && game.turn() === (boardOrientation === "w" ? "b" : "w") && !isAiThinking} 
+          isActive={gameStarted && !gameOver && game.turn() === (boardOrientation === "w" ? "b" : "w")} 
           isWhite={boardOrientation !== "w"}
           materialAdvantage={material.advantage}
+          isThinking={gameMode === "coach" && isAiThinking}
         />
       </div>
 
