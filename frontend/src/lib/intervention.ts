@@ -16,6 +16,7 @@ export const STRICTNESS_THRESHOLDS: Record<CoachStrictness, number> = {
 
 export interface InterventionState {
   isActive: boolean
+  fenBeforeMove: string | null   // FEN before the blundered move (for undo)
   userMove: string | null        // SAN notation of the blundered move (e.g. "h3")
   userMoveFrom: string | null    // Square the piece came from (e.g. "h2")
   userMoveTo: string | null      // Square the piece went to (e.g. "h3")
@@ -28,6 +29,7 @@ export interface InterventionState {
 export function createInitialInterventionState(): InterventionState {
   return {
     isActive: false,
+    fenBeforeMove: null,
     userMove: null,
     userMoveFrom: null,
     userMoveTo: null,

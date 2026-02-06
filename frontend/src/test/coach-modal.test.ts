@@ -15,6 +15,7 @@ describe('InterventionState', () => {
     const state = createInitialInterventionState()
 
     expect(state.isActive).toBe(false)
+    expect(state.fenBeforeMove).toBeNull()
     expect(state.userMove).toBeNull()
     expect(state.userMoveFrom).toBeNull()
     expect(state.userMoveTo).toBeNull()
@@ -27,6 +28,7 @@ describe('InterventionState', () => {
   it('should hold all relevant data when intervention triggers', () => {
     const state: InterventionState = {
       isActive: true,
+      fenBeforeMove: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
       userMove: 'h3',
       userMoveFrom: 'h2',
       userMoveTo: 'h3',
@@ -46,6 +48,7 @@ describe('InterventionState', () => {
   it('should reset to initial state when intervention is resolved', () => {
     const state: InterventionState = {
       isActive: true,
+      fenBeforeMove: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
       userMove: 'h3',
       userMoveFrom: 'h2',
       userMoveTo: 'h3',
@@ -245,6 +248,7 @@ describe('"Let Me Retry" — Move Undo', () => {
   it('should clear the intervention state after retry', () => {
     const state: InterventionState = {
       isActive: true,
+      fenBeforeMove: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
       userMove: 'h3',
       userMoveFrom: 'h2',
       userMoveTo: 'h3',
@@ -315,6 +319,7 @@ describe('Coach Modal Content', () => {
   it('should show the user move and the recommended move', () => {
     const state: InterventionState = {
       isActive: true,
+      fenBeforeMove: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
       userMove: 'h3',
       userMoveFrom: 'h2',
       userMoveTo: 'h3',
@@ -329,12 +334,13 @@ describe('Coach Modal Content', () => {
     expect(state.bestMove).toBe('g1f3')
   })
 
-  it('should provide both action buttons', () => {
-    const actions = ['retry', 'explain'] as const
+  it('should provide all three action buttons', () => {
+    const actions = ['retry', 'explain', 'continue'] as const
 
     expect(actions).toContain('retry')
     expect(actions).toContain('explain')
-    expect(actions).toHaveLength(2)
+    expect(actions).toContain('continue')
+    expect(actions).toHaveLength(3)
   })
 })
 
@@ -367,6 +373,7 @@ describe('Intervention Flow — End to End', () => {
     if (isBlunder) {
       intervention = {
         isActive: true,
+        fenBeforeMove: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
         userMove: blunderMove!.san,
         userMoveFrom: blunderMove!.from,
         userMoveTo: blunderMove!.to,
@@ -406,6 +413,7 @@ describe('Intervention Flow — End to End', () => {
     // Trigger intervention
     intervention = {
       isActive: true,
+      fenBeforeMove: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
       userMove: blunderMove!.san,
       userMoveFrom: blunderMove!.from,
       userMoveTo: blunderMove!.to,

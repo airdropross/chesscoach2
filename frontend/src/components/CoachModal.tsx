@@ -11,6 +11,7 @@ interface CoachModalProps {
   playerColor: "w" | "b";
   onRetry: () => void;
   onExplain: () => void;
+  onContinue: () => void;
 }
 
 export function CoachModal({
@@ -18,6 +19,7 @@ export function CoachModal({
   playerColor,
   onRetry,
   onExplain,
+  onContinue,
 }: CoachModalProps) {
   if (!intervention.isActive) return null;
 
@@ -96,18 +98,26 @@ export function CoachModal({
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3">
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-3">
+            <button
+              onClick={onRetry}
+              className="flex-1 px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            >
+              Let me retry
+            </button>
+            <button
+              onClick={onExplain}
+              className="flex-1 px-4 py-3 bg-neutral-700 hover:bg-neutral-600 text-neutral-200 font-semibold rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            >
+              Explain why
+            </button>
+          </div>
           <button
-            onClick={onRetry}
-            className="flex-1 px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+            onClick={onContinue}
+            className="w-full px-4 py-2 text-neutral-500 hover:text-neutral-300 text-sm font-medium transition-colors duration-200"
           >
-            Let me retry
-          </button>
-          <button
-            onClick={onExplain}
-            className="flex-1 px-4 py-3 bg-neutral-700 hover:bg-neutral-600 text-neutral-200 font-semibold rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
-          >
-            Explain why
+            Continue anyway
           </button>
         </div>
       </div>

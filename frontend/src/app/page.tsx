@@ -419,6 +419,7 @@ export default function Home() {
               if (!cancelled && isMounted.current) {
                 setIntervention({
                   isActive: true,
+                  fenBeforeMove: preMoveFen.current,
                   userMove: lastMv?.san ?? null,
                   userMoveFrom: lastMv?.from ?? null,
                   userMoveTo: lastMv?.to ?? null,
@@ -627,18 +628,25 @@ export default function Home() {
 
   // Intervention handlers
   const handleRetry = useCallback(() => {
-    // Undo the blundered move by restoring the pre-move FEN
-    if (preMoveFen.current) {
-      setGame(new Chess(preMoveFen.current));
+    // Undo the blundered move by restoring the pre-move FEN from intervention state
+    if (intervention.fenBeforeMove) {
+      setGame(new Chess(intervention.fenBeforeMove));
     }
+    setIntervention(createInitialInterventionState());
+    preMoveFen.current = null;
+    preMoveEval.current = null;
+  }, [intervention.fenBeforeMove]);
+
+  const handleExplain = useCallback(() => {
+    // Phase 4 will add LLM explanation here.
+    // For now, dismiss the modal and let the game continue with the move intact.
     setIntervention(createInitialInterventionState());
     preMoveFen.current = null;
     preMoveEval.current = null;
   }, []);
 
-  const handleExplain = useCallback(() => {
-    // Phase 4 will add LLM explanation here.
-    // For now, dismiss the modal and let the game continue with the move intact.
+  const handleContinue = useCallback(() => {
+    // User accepts the move and continues playing
     setIntervention(createInitialInterventionState());
     preMoveFen.current = null;
     preMoveEval.current = null;
@@ -1026,6 +1034,7 @@ export default function Home() {
         playerColor={playerColor}
         onRetry={handleRetry}
         onExplain={handleExplain}
+        onContinue={handleContinue}
       />
     </div>
   );
