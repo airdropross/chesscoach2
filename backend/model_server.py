@@ -4,13 +4,24 @@ from maia2 import model, inference
 
 app = Flask(__name__)
 
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+    return response
+
 # Load model on startup (Use 'gpu' if you have CUDA, otherwise 'cpu')
 print("Loading Maia2 model... this may take a minute.")
 maia_model = model.from_pretrained(type="rapid", device="cpu")
 prepared_data = inference.prepare()
 
-@app.route('/predict', methods=['POST'])
+@app.route('/predict', methods=['POST', 'OPTIONS'])
 def predict():
+    # Handle CORS preflight
+    if request.method == 'OPTIONS':
+        return '', 204
+
     data = request.json
     fen = data.get('fen')
     # Default to 1500 Elo if not provided
@@ -33,4 +44,4 @@ def predict():
         return jsonify({'error': str(e)}), 400
 
 if __name__ == '__main__':
-    app.run(port=5000)
+    app.run(port=5001)

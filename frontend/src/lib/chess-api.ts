@@ -3,7 +3,7 @@
  * Connects to local Maia2 model server for human-like move prediction
  */
 
-const API_URL = 'http://localhost:5000/predict'
+const API_URL = 'http://localhost:5001/predict'
 
 export interface AnalysisResult {
   /** Best move in UCI notation (e.g., "e2e4") */
