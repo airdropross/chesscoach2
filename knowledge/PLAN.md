@@ -94,7 +94,7 @@
 * User drags piece -> **Do not commit move to board yet** (or commit tentatively).
 * Send *new* FEN (after move) to Maia2 model.
 * Compare `Previous Win Probability` vs `New Win Probability`.
-* **Math:** If win probability drop exceeds threshold -> **TRIGGER INTERVENTION**.
+* **Math:** If win probability drop exceeds 10% -> **TRIGGER INTERVENTION**.
 
 
 
@@ -107,7 +107,7 @@
 * Freeze the timer.
 * Darken the board.
 * Show Modal: "Hold on, that's a mistake."
-* Options: "Let me retry" (Undo move) or "Explain why" (Proceed to Phase 4).
+* Options: "Let me retry" (Undo move), "Explain why" (Proceed to Phase 4), or "Continue anyway" (Accept the move).
 
 
 
@@ -137,6 +137,7 @@
 * **UX:**
 * User clicks "Explain why".
 * Show skeleton loader.
+* Ask Maia2 for the best moves at a very high ELO (say 2400). Feed this result to the LLM to explain why those moves were better, and what the mistake was.
 * Stream the LLM response: *"Moving your knight there hangs your bishop. You should have pushed the pawn instead..."*
 
 
