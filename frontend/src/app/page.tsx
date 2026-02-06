@@ -10,7 +10,7 @@ import {
   createInitialInterventionState,
   isBlunder,
   calculateWinProbDrop,
-  STRICTNESS_THRESHOLDS,
+  BLUNDER_THRESHOLD,
 } from "../lib/intervention";
 
 const COLUMNS = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -328,6 +328,7 @@ export default function Home() {
   
   // Intervention state (Phase 3)
   const [intervention, setIntervention] = useState<InterventionState>(createInitialInterventionState);
+  const [isBlunderCheckPending, setIsBlunderCheckPending] = useState(false);
   const preMoveEval = useRef<number | null>(null);  // win prob before the player's move
   const preMoveFen = useRef<string | null>(null);    // FEN before the player's move
   
@@ -381,7 +382,12 @@ export default function Home() {
           eloOppo: aiElo + 200,
         });
         if (!cancelled && isMounted.current) {
-          setEvaluation(result);
+          // In coach mode, only update the eval bar after AI moves (not after player moves).
+          // When preMoveEval is set, this fetch is for blunder detection after a player move.
+          const isBlunderCheckFetch = preMoveEval.current !== null && gameMode === "coach";
+          if (!isBlunderCheckFetch) {
+            setEvaluation(result);
+          }
           
           // Blunder detection: if we have a stored pre-move eval, compare
           if (
@@ -390,7 +396,7 @@ export default function Home() {
           ) {
             const previousWp = preMoveEval.current;
             const newWp = result.winProbability;
-            const threshold = STRICTNESS_THRESHOLDS.standard;
+            const threshold = BLUNDER_THRESHOLD;
             
             if (isBlunder(previousWp, newWp, playerColor, threshold)) {
               // Get the last move details from the game
@@ -434,6 +440,7 @@ export default function Home() {
             // Clear the pending check regardless
             preMoveEval.current = null;
             preMoveFen.current = null;
+            if (!cancelled && isMounted.current) setIsBlunderCheckPending(false);
           }
         }
       } catch (error) {
@@ -441,6 +448,7 @@ export default function Home() {
         // Clear pending check on error too
         preMoveEval.current = null;
         preMoveFen.current = null;
+        if (!cancelled && isMounted.current) setIsBlunderCheckPending(false);
       } finally {
         if (!cancelled && isMounted.current) {
           setIsEvalLoading(false);
@@ -459,6 +467,7 @@ export default function Home() {
     if (game.turn() === playerColor) return; // Not AI's turn
     if (isAiThinking) return; // Already thinking
     if (intervention.isActive) return; // Blocked during intervention
+    if (isBlunderCheckPending) return; // Blunder check in progress
 
     const makeAiMove = async () => {
       setIsAiThinking(true);
@@ -570,7 +579,7 @@ export default function Home() {
     };
 
     makeAiMove();
-  }, [game, gameMode, playerColor, gameStarted, gameOver, aiElo, isAiThinking, intervention.isActive]);
+  }, [game, gameMode, playerColor, gameStarted, gameOver, aiElo, isAiThinking, intervention.isActive, isBlunderCheckPending]);
 
   const handleSquareClick = useCallback((square: Square) => {
     if (gameOver) return;
@@ -592,6 +601,7 @@ export default function Home() {
         if (gameMode === "coach" && game.turn() === playerColor && evaluation) {
           preMoveEval.current = evaluation.winProbability;
           preMoveFen.current = game.fen();
+          setIsBlunderCheckPending(true);
         }
         
         setGame(newGame);
@@ -633,6 +643,7 @@ export default function Home() {
       setGame(new Chess(intervention.fenBeforeMove));
     }
     setIntervention(createInitialInterventionState());
+    setIsBlunderCheckPending(false);
     preMoveFen.current = null;
     preMoveEval.current = null;
   }, [intervention.fenBeforeMove]);
@@ -641,6 +652,7 @@ export default function Home() {
     // Phase 4 will add LLM explanation here.
     // For now, dismiss the modal and let the game continue with the move intact.
     setIntervention(createInitialInterventionState());
+    setIsBlunderCheckPending(false);
     preMoveFen.current = null;
     preMoveEval.current = null;
   }, []);
@@ -648,6 +660,7 @@ export default function Home() {
   const handleContinue = useCallback(() => {
     // User accepts the move and continues playing
     setIntervention(createInitialInterventionState());
+    setIsBlunderCheckPending(false);
     preMoveFen.current = null;
     preMoveEval.current = null;
   }, []);
@@ -657,6 +670,7 @@ export default function Home() {
     setEvaluation(null);
     setIsAiThinking(false);
     setIntervention(createInitialInterventionState());
+    setIsBlunderCheckPending(false);
     preMoveFen.current = null;
     preMoveEval.current = null;
   };
@@ -680,6 +694,7 @@ export default function Home() {
     setEvaluation(null);
     setIsAiThinking(false);
     setIntervention(createInitialInterventionState());
+    setIsBlunderCheckPending(false);
     preMoveFen.current = null;
     preMoveEval.current = null;
     setShowSetup(false);

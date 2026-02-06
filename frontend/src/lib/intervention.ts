@@ -5,14 +5,8 @@
  * Win probability is always from white's perspective (0–1, from Maia2).
  */
 
-export type CoachStrictness = 'strict' | 'standard' | 'forgiving'
-
-/** How much win-prob drop triggers an intervention at each strictness level */
-export const STRICTNESS_THRESHOLDS: Record<CoachStrictness, number> = {
-  strict: 0.05,    // Inaccuracy: 5%+ drop
-  standard: 0.10,  // Mistake: 10%+ drop
-  forgiving: 0.20, // Blunder: 20%+ drop
-}
+/** Win-probability drop that triggers an intervention (10%) */
+export const BLUNDER_THRESHOLD = 0.10
 
 export interface InterventionState {
   isActive: boolean
@@ -66,17 +60,15 @@ export function isBlunder(
   previousWinProb: number,
   newWinProb: number,
   playerColor: 'w' | 'b',
-  threshold: number
+  threshold: number = BLUNDER_THRESHOLD
 ): boolean {
   const drop = calculateWinProbDrop(previousWinProb, newWinProb, playerColor)
   return drop >= threshold
 }
 
 /**
- * Returns a friendly intervention message scaled by severity.
+ * Returns the intervention message shown in the coach modal.
  */
-export function getInterventionMessage(drop: number): string {
-  if (drop >= 0.20) return "Hold on, that's a serious mistake!"
-  if (drop >= 0.10) return "Hold on, that's a mistake."
-  return "Wait — that move could be better."
+export function getInterventionMessage(): string {
+  return "Hold on, that's a mistake."
 }

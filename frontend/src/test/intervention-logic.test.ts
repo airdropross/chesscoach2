@@ -3,7 +3,7 @@ import { Chess } from 'chess.js'
 import {
   calculateWinProbDrop,
   isBlunder,
-  STRICTNESS_THRESHOLDS,
+  BLUNDER_THRESHOLD,
 } from '../lib/intervention'
 
 // ——————————————————————————————————————————
@@ -91,84 +91,48 @@ describe('Blunder Detection — calculateWinProbDrop', () => {
   })
 })
 
-describe('Blunder Detection — isBlunder', () => {
-  describe('Standard threshold (0.10)', () => {
-    const threshold = STRICTNESS_THRESHOLDS.standard
-
-    it('should detect a clear blunder (white drops 0.15)', () => {
-      expect(isBlunder(0.60, 0.45, 'w', threshold)).toBe(true)
-    })
-
-    it('should not flag a small inaccuracy (white drops 0.05)', () => {
-      expect(isBlunder(0.55, 0.50, 'w', threshold)).toBe(false)
-    })
-
-    it('should detect a drop just over the threshold (drop ≈ 0.11)', () => {
-      expect(isBlunder(0.60, 0.49, 'w', threshold)).toBe(true)
-    })
-
-    it('should not flag an improving move', () => {
-      expect(isBlunder(0.50, 0.65, 'w', threshold)).toBe(false)
-    })
-
-    it('should detect a clear blunder for black', () => {
-      // White's prob went from 0.40 to 0.55 → black dropped 0.15
-      expect(isBlunder(0.40, 0.55, 'b', threshold)).toBe(true)
-    })
-
-    it('should not flag a small inaccuracy for black', () => {
-      expect(isBlunder(0.45, 0.48, 'b', threshold)).toBe(false)
-    })
+describe('BLUNDER_THRESHOLD', () => {
+  it('should be 10% (0.10)', () => {
+    expect(BLUNDER_THRESHOLD).toBe(0.10)
   })
 
-  describe('Strict threshold (0.05)', () => {
-    const threshold = STRICTNESS_THRESHOLDS.strict
-
-    it('should flag a moderate inaccuracy', () => {
-      expect(isBlunder(0.55, 0.49, 'w', threshold)).toBe(true)
-    })
-
-    it('should not flag a very small fluctuation (drop 0.02)', () => {
-      expect(isBlunder(0.55, 0.53, 'w', threshold)).toBe(false)
-    })
-
-    it('should flag exact threshold (0.05 drop)', () => {
-      expect(isBlunder(0.55, 0.50, 'w', threshold)).toBe(true)
-    })
-  })
-
-  describe('Forgiving threshold (0.20)', () => {
-    const threshold = STRICTNESS_THRESHOLDS.forgiving
-
-    it('should only flag major blunders', () => {
-      expect(isBlunder(0.65, 0.44, 'w', threshold)).toBe(true)
-    })
-
-    it('should not flag a moderate mistake (drop 0.15)', () => {
-      expect(isBlunder(0.60, 0.45, 'w', threshold)).toBe(false)
-    })
-
-    it('should flag a drop just over the threshold (drop ≈ 0.21)', () => {
-      expect(isBlunder(0.60, 0.39, 'w', threshold)).toBe(true)
-    })
+  it('should be between 0 and 1', () => {
+    expect(BLUNDER_THRESHOLD).toBeGreaterThan(0)
+    expect(BLUNDER_THRESHOLD).toBeLessThan(1)
   })
 })
 
-describe('Strictness Threshold Presets', () => {
-  it('should have three strictness levels', () => {
-    expect(Object.keys(STRICTNESS_THRESHOLDS)).toHaveLength(3)
+describe('Blunder Detection — isBlunder', () => {
+  it('should detect a clear blunder (white drops 0.15)', () => {
+    expect(isBlunder(0.60, 0.45, 'w')).toBe(true)
   })
 
-  it('should have strict < standard < forgiving', () => {
-    expect(STRICTNESS_THRESHOLDS.strict).toBeLessThan(STRICTNESS_THRESHOLDS.standard)
-    expect(STRICTNESS_THRESHOLDS.standard).toBeLessThan(STRICTNESS_THRESHOLDS.forgiving)
+  it('should not flag a small inaccuracy (white drops 0.05)', () => {
+    expect(isBlunder(0.55, 0.50, 'w')).toBe(false)
   })
 
-  it('should have all thresholds between 0 and 1', () => {
-    for (const threshold of Object.values(STRICTNESS_THRESHOLDS)) {
-      expect(threshold).toBeGreaterThan(0)
-      expect(threshold).toBeLessThan(1)
-    }
+  it('should detect a drop just over the threshold (drop ≈ 0.11)', () => {
+    expect(isBlunder(0.60, 0.49, 'w')).toBe(true)
+  })
+
+  it('should not flag an improving move', () => {
+    expect(isBlunder(0.50, 0.65, 'w')).toBe(false)
+  })
+
+  it('should detect a clear blunder for black', () => {
+    // White's prob went from 0.40 to 0.55 → black dropped 0.15
+    expect(isBlunder(0.40, 0.55, 'b')).toBe(true)
+  })
+
+  it('should not flag a small inaccuracy for black', () => {
+    expect(isBlunder(0.45, 0.48, 'b')).toBe(false)
+  })
+
+  it('should accept an explicit threshold override', () => {
+    // 0.05 custom threshold — flags a 0.06 drop
+    expect(isBlunder(0.55, 0.49, 'w', 0.05)).toBe(true)
+    // 0.20 custom threshold — does not flag a 0.15 drop
+    expect(isBlunder(0.60, 0.45, 'w', 0.20)).toBe(false)
   })
 })
 
@@ -184,7 +148,7 @@ describe('Intervention Flow — Game State Integration', () => {
       // Both values are needed to calculate the drop
       const drop = calculateWinProbDrop(previousWinProb, newWinProb, 'w')
       expect(drop).toBeCloseTo(0.17)
-      expect(isBlunder(previousWinProb, newWinProb, 'w', STRICTNESS_THRESHOLDS.standard)).toBe(true)
+      expect(isBlunder(previousWinProb, newWinProb, 'w')).toBe(true)
     })
 
     it('should use the stored evaluation from before the move, not re-fetch', () => {
@@ -196,8 +160,8 @@ describe('Intervention Flow — Game State Integration', () => {
 
       const drop = calculateWinProbDrop(storedEvalBeforeMove, evalAfterMove, 'w')
       expect(drop).toBeCloseTo(0.02)
-      // Small fluctuation — not a blunder at any threshold
-      expect(isBlunder(storedEvalBeforeMove, evalAfterMove, 'w', STRICTNESS_THRESHOLDS.strict)).toBe(false)
+      // Small fluctuation — not a blunder
+      expect(isBlunder(storedEvalBeforeMove, evalAfterMove, 'w')).toBe(false)
     })
   })
 
@@ -294,7 +258,7 @@ describe('Intervention Flow — Game State Integration', () => {
 
       const drop = calculateWinProbDrop(previousWinProb, newWinProb, playerColor)
       expect(drop).toBeCloseTo(0.20)
-      expect(isBlunder(previousWinProb, newWinProb, playerColor, STRICTNESS_THRESHOLDS.standard)).toBe(true)
+      expect(isBlunder(previousWinProb, newWinProb, playerColor)).toBe(true)
     })
   })
 
@@ -320,56 +284,38 @@ describe('Intervention Flow — Game State Integration', () => {
 describe('Blunder Detection — Realistic Scenarios', () => {
   it('should detect hanging a piece (large win prob drop)', () => {
     // White hangs a bishop: win prob drops from 0.55 to 0.25
-    const previous = 0.55
-    const after = 0.25
-    expect(isBlunder(previous, after, 'w', STRICTNESS_THRESHOLDS.forgiving)).toBe(true)
-    expect(isBlunder(previous, after, 'w', STRICTNESS_THRESHOLDS.standard)).toBe(true)
-    expect(isBlunder(previous, after, 'w', STRICTNESS_THRESHOLDS.strict)).toBe(true)
+    expect(isBlunder(0.55, 0.25, 'w')).toBe(true)
   })
 
-  it('should detect a positional mistake but not at forgiving level', () => {
+  it('should detect a positional mistake (drop 0.12)', () => {
     // White makes a mediocre positional move: drops 0.12
-    const previous = 0.55
-    const after = 0.43
-    expect(isBlunder(previous, after, 'w', STRICTNESS_THRESHOLDS.strict)).toBe(true)
-    expect(isBlunder(previous, after, 'w', STRICTNESS_THRESHOLDS.standard)).toBe(true)
-    expect(isBlunder(previous, after, 'w', STRICTNESS_THRESHOLDS.forgiving)).toBe(false)
+    expect(isBlunder(0.55, 0.43, 'w')).toBe(true)
   })
 
   it('should not flag a normal opening move as blunder', () => {
     // Win prob barely changes from 0.50 to 0.48 — totally normal
-    const previous = 0.50
-    const after = 0.48
-    expect(isBlunder(previous, after, 'w', STRICTNESS_THRESHOLDS.strict)).toBe(false)
-    expect(isBlunder(previous, after, 'w', STRICTNESS_THRESHOLDS.standard)).toBe(false)
-    expect(isBlunder(previous, after, 'w', STRICTNESS_THRESHOLDS.forgiving)).toBe(false)
+    expect(isBlunder(0.50, 0.48, 'w')).toBe(false)
   })
 
   it('should detect a blunder that turns a winning position into a losing one', () => {
     // White had a solid advantage (0.72), blunders into losing (0.35)
-    const previous = 0.72
-    const after = 0.35
-    const drop = calculateWinProbDrop(previous, after, 'w')
+    const drop = calculateWinProbDrop(0.72, 0.35, 'w')
     expect(drop).toBeCloseTo(0.37)
-    expect(isBlunder(previous, after, 'w', STRICTNESS_THRESHOLDS.forgiving)).toBe(true)
+    expect(isBlunder(0.72, 0.35, 'w')).toBe(true)
   })
 
   it('should detect a blunder in an already-losing position', () => {
     // White was already losing (0.30), plays a bad move (0.15)
-    const previous = 0.30
-    const after = 0.15
-    const drop = calculateWinProbDrop(previous, after, 'w')
+    const drop = calculateWinProbDrop(0.30, 0.15, 'w')
     expect(drop).toBeCloseTo(0.15)
-    expect(isBlunder(previous, after, 'w', STRICTNESS_THRESHOLDS.standard)).toBe(true)
+    expect(isBlunder(0.30, 0.15, 'w')).toBe(true)
   })
 
   it('should not flag a good sacrifice as blunder (position improves later)', () => {
     // A queen sacrifice might look bad on win prob, but this test is about the
     // immediate evaluation — the system sees the drop and would flag it.
     // That's expected behaviour: the intervention gives the user a chance to reconsider.
-    const previous = 0.55
-    const after = 0.30
-    expect(isBlunder(previous, after, 'w', STRICTNESS_THRESHOLDS.standard)).toBe(true)
+    expect(isBlunder(0.55, 0.30, 'w')).toBe(true)
     // The coach modal would then let the user confirm they want to continue
   })
 })

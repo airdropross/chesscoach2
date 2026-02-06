@@ -311,9 +311,7 @@ describe('"Explain Why" — Proceed to Coach', () => {
 
 describe('Coach Modal Content', () => {
   it('should display a friendly intervention message', () => {
-    expect(getInterventionMessage(0.25)).toBe("Hold on, that's a serious mistake!")
-    expect(getInterventionMessage(0.15)).toBe("Hold on, that's a mistake.")
-    expect(getInterventionMessage(0.06)).toBe("Wait — that move could be better.")
+    expect(getInterventionMessage()).toBe("Hold on, that's a mistake.")
   })
 
   it('should show the user move and the recommended move', () => {

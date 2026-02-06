@@ -32,7 +32,7 @@ export function CoachModal({
         )
       : 0;
 
-  const message = getInterventionMessage(drop);
+  const message = getInterventionMessage();
 
   const dropPercent = Math.round(drop * 100);
   const beforePercent =
@@ -61,9 +61,7 @@ export function CoachModal({
       <div className="relative bg-neutral-900 border border-neutral-700 rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
         {/* Header */}
         <div className="text-center mb-5">
-          <div className="text-4xl mb-3">
-            {drop >= 0.20 ? "🚨" : drop >= 0.10 ? "⚠️" : "💡"}
-          </div>
+          <div className="text-4xl mb-3">⚠️</div>
           <h2 className="text-xl font-bold text-white">{message}</h2>
         </div>
 
