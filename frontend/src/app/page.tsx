@@ -3,7 +3,15 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Chess, Square } from "chess.js";
 import { EvalBar } from "../components/EvalBar";
+import { CoachModal } from "../components/CoachModal";
 import { fetchAnalysis, type AnalysisResult } from "../lib/chess-api";
+import {
+  type InterventionState,
+  createInitialInterventionState,
+  isBlunder,
+  calculateWinProbDrop,
+  BLUNDER_THRESHOLD,
+} from "../lib/intervention";
 
 const COLUMNS = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const ROWS = ["8", "7", "6", "5", "4", "3", "2", "1"];
@@ -318,6 +326,12 @@ export default function Home() {
   const [isEvalLoading, setIsEvalLoading] = useState(false);
   const [showBestMoveArrow, setShowBestMoveArrow] = useState(false);
   
+  // Intervention state (Phase 3)
+  const [intervention, setIntervention] = useState<InterventionState>(createInitialInterventionState);
+  const [isBlunderCheckPending, setIsBlunderCheckPending] = useState(false);
+  const preMoveEval = useRef<number | null>(null);  // win prob before the player's move
+  const preMoveFen = useRef<string | null>(null);    // FEN before the player's move
+  
   // Ref to track if component is mounted (for async cleanup)
   const isMounted = useRef(true);
   
@@ -326,8 +340,9 @@ export default function Home() {
   }, []);
 
   // Timer effect - ticks for both players (including AI)
+  // Freezes during intervention
   useEffect(() => {
-    if (!gameStarted || gameOver || game.isGameOver()) return;
+    if (!gameStarted || gameOver || game.isGameOver() || intervention.isActive) return;
 
     const interval = setInterval(() => {
       if (game.turn() === "w") {
@@ -350,9 +365,9 @@ export default function Home() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [gameStarted, gameOver, game]);
+  }, [gameStarted, gameOver, game, intervention.isActive]);
 
-  // Fetch evaluation after each move
+  // Fetch evaluation after each move + blunder detection
   useEffect(() => {
     if (gameOver || game.isGameOver()) return;
     
@@ -367,10 +382,73 @@ export default function Home() {
           eloOppo: aiElo + 200,
         });
         if (!cancelled && isMounted.current) {
-          setEvaluation(result);
+          // In coach mode, only update the eval bar after AI moves (not after player moves).
+          // When preMoveEval is set, this fetch is for blunder detection after a player move.
+          const isBlunderCheckFetch = preMoveEval.current !== null && gameMode === "coach";
+          if (!isBlunderCheckFetch) {
+            setEvaluation(result);
+          }
+          
+          // Blunder detection: if we have a stored pre-move eval, compare
+          if (
+            preMoveEval.current !== null &&
+            gameMode === "coach"
+          ) {
+            const previousWp = preMoveEval.current;
+            const newWp = result.winProbability;
+            const threshold = BLUNDER_THRESHOLD;
+            
+            if (isBlunder(previousWp, newWp, playerColor, threshold)) {
+              // Get the last move details from the game
+              const lastMoveArr = game.history({ verbose: true });
+              const lastMv = lastMoveArr[lastMoveArr.length - 1];
+              
+              // Also fetch the pre-move best move for the modal
+              // We can use the evaluation from before — or re-fetch at high ELO
+              // For now, fetch from the pre-move FEN at high ELO
+              let bestMove: string | null = null;
+              let moveProbs: Record<string, number> | null = null;
+              
+              if (preMoveFen.current) {
+                try {
+                  const preMoveAnalysis = await fetchAnalysis(preMoveFen.current, {
+                    eloSelf: 2000,
+                    eloOppo: 2000,
+                  });
+                  bestMove = preMoveAnalysis.bestMove;
+                  moveProbs = preMoveAnalysis.moves;
+                } catch {
+                  // Fallback: no best move info
+                }
+              }
+              
+              if (!cancelled && isMounted.current) {
+                setIntervention({
+                  isActive: true,
+                  fenBeforeMove: preMoveFen.current,
+                  userMove: lastMv?.san ?? null,
+                  userMoveFrom: lastMv?.from ?? null,
+                  userMoveTo: lastMv?.to ?? null,
+                  previousWinProb: previousWp,
+                  newWinProb: newWp,
+                  bestMove,
+                  moveProbs,
+                });
+              }
+            }
+            
+            // Clear the pending check regardless
+            preMoveEval.current = null;
+            preMoveFen.current = null;
+            if (!cancelled && isMounted.current) setIsBlunderCheckPending(false);
+          }
         }
       } catch (error) {
         if (!cancelled) console.error("Failed to fetch evaluation:", error);
+        // Clear pending check on error too
+        preMoveEval.current = null;
+        preMoveFen.current = null;
+        if (!cancelled && isMounted.current) setIsBlunderCheckPending(false);
       } finally {
         if (!cancelled && isMounted.current) {
           setIsEvalLoading(false);
@@ -380,14 +458,16 @@ export default function Home() {
     
     fetchEval();
     return () => { cancelled = true; };
-  }, [game, gameOver, aiElo]);
+  }, [game, gameOver, aiElo, gameMode, playerColor]);
 
-  // AI move in coach mode
+  // AI move in coach mode — blocked during intervention
   useEffect(() => {
     if (gameMode !== "coach") return;
     if (!gameStarted || gameOver || game.isGameOver()) return;
     if (game.turn() === playerColor) return; // Not AI's turn
     if (isAiThinking) return; // Already thinking
+    if (intervention.isActive) return; // Blocked during intervention
+    if (isBlunderCheckPending) return; // Blunder check in progress
 
     const makeAiMove = async () => {
       setIsAiThinking(true);
@@ -499,10 +579,11 @@ export default function Home() {
     };
 
     makeAiMove();
-  }, [game, gameMode, playerColor, gameStarted, gameOver, aiElo, isAiThinking]);
+  }, [game, gameMode, playerColor, gameStarted, gameOver, aiElo, isAiThinking, intervention.isActive, isBlunderCheckPending]);
 
   const handleSquareClick = useCallback((square: Square) => {
     if (gameOver) return;
+    if (intervention.isActive) return; // Block during intervention
     
     const piece = game.get(square);
 
@@ -516,6 +597,13 @@ export default function Home() {
       });
 
       if (move) {
+        // In coach mode, store the pre-move eval for blunder detection
+        if (gameMode === "coach" && game.turn() === playerColor && evaluation) {
+          preMoveEval.current = evaluation.winProbability;
+          preMoveFen.current = game.fen();
+          setIsBlunderCheckPending(true);
+        }
+        
         setGame(newGame);
         setSelectedSquare(null);
         setValidMoves([]);
@@ -546,12 +634,45 @@ export default function Home() {
     // Otherwise, clear selection
     setSelectedSquare(null);
     setValidMoves([]);
-  }, [game, selectedSquare, validMoves, gameStarted, gameOver]);
+  }, [game, selectedSquare, validMoves, gameStarted, gameOver, intervention.isActive, gameMode, playerColor, evaluation]);
+
+  // Intervention handlers
+  const handleRetry = useCallback(() => {
+    // Undo the blundered move by restoring the pre-move FEN from intervention state
+    if (intervention.fenBeforeMove) {
+      setGame(new Chess(intervention.fenBeforeMove));
+    }
+    setIntervention(createInitialInterventionState());
+    setIsBlunderCheckPending(false);
+    preMoveFen.current = null;
+    preMoveEval.current = null;
+  }, [intervention.fenBeforeMove]);
+
+  const handleExplain = useCallback(() => {
+    // Phase 4 will add LLM explanation here.
+    // For now, dismiss the modal and let the game continue with the move intact.
+    setIntervention(createInitialInterventionState());
+    setIsBlunderCheckPending(false);
+    preMoveFen.current = null;
+    preMoveEval.current = null;
+  }, []);
+
+  const handleContinue = useCallback(() => {
+    // User accepts the move and continues playing
+    setIntervention(createInitialInterventionState());
+    setIsBlunderCheckPending(false);
+    preMoveFen.current = null;
+    preMoveEval.current = null;
+  }, []);
 
   const resetGame = () => {
     setShowSetup(true);
     setEvaluation(null);
     setIsAiThinking(false);
+    setIntervention(createInitialInterventionState());
+    setIsBlunderCheckPending(false);
+    preMoveFen.current = null;
+    preMoveEval.current = null;
   };
 
   const startGame = (color: "w" | "b" | "random", mode: GameMode = "pass-and-play", elo: number = 1000) => {
@@ -572,6 +693,10 @@ export default function Home() {
     setAiElo(elo);
     setEvaluation(null);
     setIsAiThinking(false);
+    setIntervention(createInitialInterventionState());
+    setIsBlunderCheckPending(false);
+    preMoveFen.current = null;
+    preMoveEval.current = null;
     setShowSetup(false);
     
     // In coach mode, if player is black, AI needs to move first
@@ -735,7 +860,7 @@ export default function Home() {
         />
         
         {/* Board container */}
-        <div className="relative">
+        <div className={`relative transition-all duration-300 ${intervention.isActive ? "opacity-50 pointer-events-none" : ""}`}>
         {/* Board shadow/glow */}
         <div className="absolute -inset-4 bg-gradient-to-br from-amber-500/20 to-orange-600/20 rounded-2xl blur-xl" />
         
@@ -917,6 +1042,15 @@ export default function Home() {
       <p className="mt-3 text-neutral-500 text-sm">
         Move {Math.floor(game.history().length / 2) + 1} • {gameMode === "coach" ? `vs Computer (${ELO_OPTIONS.find(o => o.elo === aiElo)?.label || "Custom"})` : "Pass & Play"} • 10 min
       </p>
+
+      {/* Coach Modal (Phase 3) */}
+      <CoachModal
+        intervention={intervention}
+        playerColor={playerColor}
+        onRetry={handleRetry}
+        onExplain={handleExplain}
+        onContinue={handleContinue}
+      />
     </div>
   );
 }

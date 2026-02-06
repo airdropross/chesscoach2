@@ -30,12 +30,6 @@
 
 * **User Inputs:**
 * **Target ELO:** User selects the difficulty of the opponent (e.g., 800, 1000, 1200, 1500).
-* **Coach Strictness:** User selects intervention threshold:
-* *Strict:* Intervenes on inaccuracies (0.5+ pawn loss).
-* *Standard:* Intervenes on mistakes (1.5+ pawn loss).
-* *Forgiving:* Intervenes only on blunders (3.0+ pawn loss).
-
-
 * **Side Selection:** White, Black, or Random.
 
 
@@ -54,8 +48,8 @@
 
 * **Logic:** Upon User Move, compare win probability before and after the move.
 * **Action:**
-* If win probability drop is below threshold: Game continues normally. Maia2 replies.
-* If win probability drop exceeds threshold: **GAME PAUSES.** The move is tentatively placed on the board but highlighted (e.g., Orange/Red border). The "Coach Modal" is triggered.
+* If win probability drop is below 10%: Game continues normally. Maia2 replies.
+* If win probability drop exceeds 10%: **GAME PAUSES.** The move is tentatively placed on the board but highlighted (e.g., Orange/Red border). The "Coach Modal" is triggered.
 
 
 
