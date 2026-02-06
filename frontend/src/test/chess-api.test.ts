@@ -28,7 +28,7 @@ describe('fetchAnalysis', () => {
 
     await fetchAnalysis(STARTING_FEN)
 
-    expect(mockFetch).toHaveBeenCalledWith('http://localhost:5000/predict', {
+    expect(mockFetch).toHaveBeenCalledWith('http://localhost:5001/predict', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fen: STARTING_FEN }),
@@ -111,7 +111,7 @@ describe('fetchAnalysis', () => {
 
     await fetchAnalysis(STARTING_FEN, { eloSelf: 1200, eloOppo: 1400 })
 
-    expect(mockFetch).toHaveBeenCalledWith('http://localhost:5000/predict', {
+    expect(mockFetch).toHaveBeenCalledWith('http://localhost:5001/predict', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fen: STARTING_FEN, elo_self: 1200, elo_oppo: 1400 }),

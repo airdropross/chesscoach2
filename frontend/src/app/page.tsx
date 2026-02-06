@@ -351,26 +351,30 @@ export default function Home() {
   useEffect(() => {
     if (gameOver || game.isGameOver()) return;
     
+    // Cancel stale fetches when game advances before a fetch completes
+    let cancelled = false;
+    
     const fetchEval = async () => {
       setIsEvalLoading(true);
       try {
         const result = await fetchAnalysis(game.fen(), {
-          eloSelf: aiElo,
-          eloOppo: aiElo,
+          eloSelf: aiElo + 400,
+          eloOppo: aiElo + 400,
         });
-        if (isMounted.current) {
+        if (!cancelled && isMounted.current) {
           setEvaluation(result);
         }
       } catch (error) {
-        console.error("Failed to fetch evaluation:", error);
+        if (!cancelled) console.error("Failed to fetch evaluation:", error);
       } finally {
-        if (isMounted.current) {
+        if (!cancelled && isMounted.current) {
           setIsEvalLoading(false);
         }
       }
     };
     
     fetchEval();
+    return () => { cancelled = true; };
   }, [game, gameOver, aiElo]);
 
   // AI move in coach mode
@@ -387,37 +391,82 @@ export default function Home() {
         // Add small delay for UX (feels more natural)
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        const result = await fetchAnalysis(game.fen(), { eloSelf: aiElo, eloOppo: aiElo });
+        const result = await fetchAnalysis(game.fen(), { eloSelf: aiElo + 400, eloOppo: aiElo + 400 });
         
         if (!isMounted.current || gameOver) return;
         
+        // On the first move, force a main-line opening pawn move
+        // Use FEN fullmove number (not history.length, which resets on Chess(fen))
+        let sampledMove: string;
+        const fullmoveNumber = parseInt(game.fen().split(" ")[5], 10);
+        if (fullmoveNumber === 1 && game.turn() === "w") {
+          // AI is white, move 1: play e4 or d4
+          sampledMove = Math.random() < 0.5 ? "e2e4" : "d2d4";
+        } else if (fullmoveNumber === 1 && game.turn() === "b") {
+          // AI is black, responding to move 1: play e5 or d5
+          sampledMove = Math.random() < 0.5 ? "e7e5" : "d7d5";
+        } else {
+          // Sample a move from the probability distribution (weighted random)
+          // This makes the AI play more naturally like a real human at this ELO
+          const entries = Object.entries(result.moves);
+          const totalProb = entries.reduce((sum, [, p]) => sum + p, 0);
+          let rand = Math.random() * totalProb;
+          sampledMove = result.bestMove; // fallback
+          for (const [uci, prob] of entries) {
+            rand -= prob;
+            if (rand <= 0) {
+              sampledMove = uci;
+              break;
+            }
+          }
+        }
+        const moveFrom = sampledMove.slice(0, 2);
+        const moveTo = sampledMove.slice(2, 4);
+        const movePromotion = sampledMove.length > 4 ? sampledMove[4] : undefined;
+        
         // Make the move
         const newGame = new Chess(game.fen());
-        const move = newGame.move({ from: result.from as Square, to: result.to as Square, promotion: "q" });
+        const moveObj: { from: string; to: string; promotion?: string } = { from: moveFrom, to: moveTo };
+        if (movePromotion) moveObj.promotion = movePromotion;
+        
+        console.log(`AI move: ${sampledMove} (from=${moveFrom}, to=${moveTo}) FEN=${game.fen()}`);
+        const move = newGame.move(moveObj);
         
         if (move) {
           // Deduct random time from AI clock (0-30 seconds)
           const timeDeduction = Math.floor(Math.random() * 31);
           const aiColor = playerColor === "w" ? "b" : "w";
           
+          let aiTimedOut = false;
           if (aiColor === "w") {
-            setWhiteTime(prev => Math.max(0, prev - timeDeduction));
+            setWhiteTime(prev => {
+              const newTime = Math.max(0, prev - timeDeduction);
+              if (newTime <= 0) aiTimedOut = true;
+              return newTime;
+            });
           } else {
-            setBlackTime(prev => Math.max(0, prev - timeDeduction));
+            setBlackTime(prev => {
+              const newTime = Math.max(0, prev - timeDeduction);
+              if (newTime <= 0) aiTimedOut = true;
+              return newTime;
+            });
           }
           
           setGame(newGame);
-          setEvaluation(result);
+          // Don't set evaluation here — the eval effect will fetch
+          // for the new position when game state changes
           
           // Check for game over
-          if (newGame.isCheckmate()) {
+          if (aiTimedOut) {
+            setGameOver(`${aiColor === "w" ? "Black" : "White"} wins on time!`);
+          } else if (newGame.isCheckmate()) {
             setGameOver(`Checkmate! ${newGame.turn() === "w" ? "Black" : "White"} wins!`);
           } else if (newGame.isDraw()) {
             setGameOver("Draw!");
           }
         }
       } catch (error) {
-        console.error("AI move failed:", error);
+        console.error("AI move failed:", error, "\nFEN:", game.fen(), "\nHistory:", game.history(), "\nTurn:", game.turn());
       } finally {
         if (isMounted.current) {
           setIsAiThinking(false);
@@ -657,15 +706,9 @@ export default function Home() {
 
       {/* Board container with eval bar */}
       <div className="flex items-center gap-4">
-        {/* Evaluation Bar — flip win probability to white's perspective */}
+        {/* Evaluation Bar — winProbability is already from white's perspective */}
         <EvalBar
-          winProbability={
-            evaluation?.winProbability != null
-              ? game.turn() === "w"
-                ? evaluation.winProbability
-                : 1 - evaluation.winProbability
-              : null
-          }
+          winProbability={evaluation?.winProbability ?? null}
           isLoading={isEvalLoading}
         />
         

@@ -12,7 +12,7 @@ export interface AnalysisResult {
   from: string
   /** Target square (e.g., "e4") */
   to: string
-  /** Win probability (0-1, from current player's perspective) */
+  /** Win probability (0-1, always from white's perspective) */
   winProbability: number
   /** All legal moves with their predicted probabilities */
   moves: Record<string, number>

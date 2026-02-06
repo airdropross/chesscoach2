@@ -32,7 +32,7 @@ The Maia2 model runs as a Flask server in the `backend/` directory. Unlike tradi
 | Field             | Type                    | Description                                                     |
 | :---------------- | :---------------------- | :-------------------------------------------------------------- |
 | `best_move`       | String                  | Best move in UCI notation (e.g., `e2e4`, `g1f3`).               |
-| `win_probability` | Number (0–1)            | Predicted win probability from the current player's perspective. |
+| `win_probability` | Number (0–1)            | Predicted win probability from **white's perspective** (always). |
 | `moves`           | Object (string→number)  | All legal moves mapped to their predicted probabilities.         |
 | `error`           | String (on failure)     | Error message (returned with HTTP 400).                          |
 
@@ -82,6 +82,6 @@ python model_server.py           # starts on port 5000
 ## Integration Notes
 
 - **Move format:** Maia2 returns UCI notation (`e2e4`). Extract `from` as first 2 chars, `to` as chars 3–4. Promotion suffix (e.g., `e7e8q`) may appear as a 5th character.
-- **Win probability:** Ranges 0–1 from the perspective of the player to move. Convert to percentage by multiplying by 100.
+- **Win probability:** Ranges 0–1, always from **white's perspective** regardless of whose turn it is. Convert to percentage by multiplying by 100.
 - **ELO-aware AI:** When using Maia2 as an opponent, set `elo_self` to the desired AI strength and `elo_oppo` to the player's estimated rating.
 - **Move probabilities:** The `moves` dict contains all legal moves with predicted probabilities. Useful for showing move quality or implementing weighted random selection for more human-like play.
