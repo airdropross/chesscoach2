@@ -1,43 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { Chess } from 'chess.js'
-
-/**
- * Phase 3.2 — The Intervention UI (Coach Modal)
- *
- * When a blunder is detected, the game should:
- *   1. Freeze the timer
- *   2. Darken the board
- *   3. Show a CoachModal with:
- *      - "Hold on, that's a mistake."
- *      - "Let me retry" → undo the move
- *      - "Explain why" → proceed to Phase 4 (LLM explanation)
- */
-
-// --- Types expected to be implemented ---
-
-interface InterventionState {
-  isActive: boolean
-  userMove: string | null        // SAN notation of the blundered move (e.g. "h3")
-  userMoveFrom: string | null    // Square the piece came from (e.g. "h2")
-  userMoveTo: string | null      // Square the piece went to (e.g. "h3")
-  previousWinProb: number | null
-  newWinProb: number | null
-  bestMove: string | null        // Maia2's recommended move in UCI (e.g. "g1f3")
-  moveProbs: Record<string, number> | null // Move probability distribution
-}
-
-function createInitialInterventionState(): InterventionState {
-  return {
-    isActive: false,
-    userMove: null,
-    userMoveFrom: null,
-    userMoveTo: null,
-    previousWinProb: null,
-    newWinProb: null,
-    bestMove: null,
-    moveProbs: null,
-  }
-}
+import {
+  type InterventionState,
+  createInitialInterventionState,
+  getInterventionMessage,
+} from '../lib/intervention'
 
 // ——————————————————————————————————————————
 // Tests
@@ -340,15 +307,9 @@ describe('"Explain Why" — Proceed to Coach', () => {
 
 describe('Coach Modal Content', () => {
   it('should display a friendly intervention message', () => {
-    const getMessage = (drop: number): string => {
-      if (drop >= 0.20) return "Hold on, that's a serious mistake!"
-      if (drop >= 0.10) return "Hold on, that's a mistake."
-      return "Wait — that move could be better."
-    }
-
-    expect(getMessage(0.25)).toBe("Hold on, that's a serious mistake!")
-    expect(getMessage(0.15)).toBe("Hold on, that's a mistake.")
-    expect(getMessage(0.06)).toBe("Wait — that move could be better.")
+    expect(getInterventionMessage(0.25)).toBe("Hold on, that's a serious mistake!")
+    expect(getInterventionMessage(0.15)).toBe("Hold on, that's a mistake.")
+    expect(getInterventionMessage(0.06)).toBe("Wait — that move could be better.")
   })
 
   it('should show the user move and the recommended move', () => {

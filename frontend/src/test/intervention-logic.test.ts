@@ -1,57 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { Chess } from 'chess.js'
-
-/**
- * Phase 3.1 — The Comparative Logic (Blunder Detection)
- *
- * Core idea: compare win probability BEFORE and AFTER the user's move.
- * Win probability is always from white's perspective (0–1).
- * A "blunder" is when the moving player's effective win probability drops
- * by more than a configurable threshold.
- */
-
-// --- Types expected to be implemented ---
-
-type CoachStrictness = 'strict' | 'standard' | 'forgiving'
-
-// Threshold presets: how much win-prob drop triggers an intervention
-const STRICTNESS_THRESHOLDS: Record<CoachStrictness, number> = {
-  strict: 0.05,    // Inaccuracy: 5%+ drop
-  standard: 0.10,  // Mistake: 10%+ drop
-  forgiving: 0.20, // Blunder: 20%+ drop
-}
-
-/**
- * Calculate the win-probability drop FROM THE MOVING PLAYER'S PERSPECTIVE.
- *
- * winProb is always from white's perspective:
- *   - If player is white: drop = previous - current  (their number went down)
- *   - If player is black: drop = current - previous  (white's number went UP = bad for black)
- */
-function calculateWinProbDrop(
-  previousWinProb: number,
-  newWinProb: number,
-  playerColor: 'w' | 'b'
-): number {
-  if (playerColor === 'w') {
-    return previousWinProb - newWinProb
-  } else {
-    return newWinProb - previousWinProb
-  }
-}
-
-/**
- * Determine whether the move constitutes a blunder given the threshold.
- */
-function isBlunder(
-  previousWinProb: number,
-  newWinProb: number,
-  playerColor: 'w' | 'b',
-  threshold: number
-): boolean {
-  const drop = calculateWinProbDrop(previousWinProb, newWinProb, playerColor)
-  return drop >= threshold
-}
+import {
+  calculateWinProbDrop,
+  isBlunder,
+  STRICTNESS_THRESHOLDS,
+} from '../lib/intervention'
 
 // ——————————————————————————————————————————
 // Tests
