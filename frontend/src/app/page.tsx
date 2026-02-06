@@ -12,6 +12,7 @@ import {
   calculateWinProbDrop,
   BLUNDER_THRESHOLD,
 } from "../lib/intervention";
+import { fetchExplanation } from "../lib/coach-api";
 
 const COLUMNS = ["a", "b", "c", "d", "e", "f", "g", "h"];
 const ROWS = ["8", "7", "6", "5", "4", "3", "2", "1"];
@@ -332,6 +333,10 @@ export default function Home() {
   const preMoveEval = useRef<number | null>(null);  // win prob before the player's move
   const preMoveFen = useRef<string | null>(null);    // FEN before the player's move
   
+  // Explanation state (Phase 4)
+  const [explanationText, setExplanationText] = useState("");
+  const [isExplaining, setIsExplaining] = useState(false);
+  
   // Ref to track if component is mounted (for async cleanup)
   const isMounted = useRef(true);
   
@@ -646,16 +651,35 @@ export default function Home() {
     setIsBlunderCheckPending(false);
     preMoveFen.current = null;
     preMoveEval.current = null;
+    setExplanationText("");
+    setIsExplaining(false);
   }, [intervention.fenBeforeMove]);
 
   const handleExplain = useCallback(() => {
-    // Phase 4 will add LLM explanation here.
-    // For now, dismiss the modal and let the game continue with the move intact.
-    setIntervention(createInitialInterventionState());
-    setIsBlunderCheckPending(false);
-    preMoveFen.current = null;
-    preMoveEval.current = null;
-  }, []);
+    if (!intervention.fenBeforeMove || !intervention.userMove || !intervention.bestMove) return;
+    
+    setIsExplaining(true);
+    setExplanationText("");
+    
+    fetchExplanation(
+      {
+        fen: intervention.fenBeforeMove,
+        userMove: intervention.userMove,
+        bestMove: intervention.bestMove,
+        moveProbs: intervention.moveProbs ?? undefined,
+      },
+      (chunk) => {
+        setExplanationText((prev) => prev + chunk);
+      }
+    )
+      .catch((err) => {
+        console.error("Explanation failed:", err);
+        setExplanationText("Sorry, I couldn't generate an explanation right now. Please try again.");
+      })
+      .finally(() => {
+        if (isMounted.current) setIsExplaining(false);
+      });
+  }, [intervention]);
 
   const handleContinue = useCallback(() => {
     // User accepts the move and continues playing
@@ -663,6 +687,8 @@ export default function Home() {
     setIsBlunderCheckPending(false);
     preMoveFen.current = null;
     preMoveEval.current = null;
+    setExplanationText("");
+    setIsExplaining(false);
   }, []);
 
   const resetGame = () => {
@@ -673,6 +699,8 @@ export default function Home() {
     setIsBlunderCheckPending(false);
     preMoveFen.current = null;
     preMoveEval.current = null;
+    setExplanationText("");
+    setIsExplaining(false);
   };
 
   const startGame = (color: "w" | "b" | "random", mode: GameMode = "pass-and-play", elo: number = 1000) => {
@@ -1043,13 +1071,15 @@ export default function Home() {
         Move {Math.floor(game.history().length / 2) + 1} • {gameMode === "coach" ? `vs Computer (${ELO_OPTIONS.find(o => o.elo === aiElo)?.label || "Custom"})` : "Pass & Play"} • 10 min
       </p>
 
-      {/* Coach Modal (Phase 3) */}
+      {/* Coach Modal (Phase 3 + 4) */}
       <CoachModal
         intervention={intervention}
         playerColor={playerColor}
         onRetry={handleRetry}
         onExplain={handleExplain}
         onContinue={handleContinue}
+        explanationText={explanationText}
+        isExplaining={isExplaining}
       />
     </div>
   );
