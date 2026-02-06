@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Python virtual environment
+backend/chesscoach/
+
+# Model weights (too large for git)
+*.pt
+
+# Next.js build output
+.next/
+out/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# Python bytecode
+__pycache__/
+*.pyc
