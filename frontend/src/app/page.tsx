@@ -258,7 +258,7 @@ function PlayerClock({
   const playerAdvantage = isWhite ? materialAdvantage : -materialAdvantage;
   
   return (
-    <div className="flex items-center justify-center gap-3">
+    <div className="relative flex items-center justify-center gap-3">
       {/* Clock */}
       <div className={`
         flex items-center gap-3 px-5 py-3 rounded-xl font-mono text-2xl font-bold
@@ -288,10 +288,10 @@ function PlayerClock({
         </div>
       )}
       
-      {/* Thinking indicator */}
-      {isThinking && (
-        <span className="text-amber-400 text-sm font-medium animate-pulse">thinking...</span>
-      )}
+      {/* Thinking indicator — absolutely positioned so it doesn't affect layout */}
+      <span className={`absolute left-full ml-3 text-sm font-medium whitespace-nowrap transition-opacity duration-200 ${isThinking ? "text-amber-400 animate-pulse opacity-100" : "opacity-0 pointer-events-none"}`}>
+        thinking...
+      </span>
     </div>
   );
 }
